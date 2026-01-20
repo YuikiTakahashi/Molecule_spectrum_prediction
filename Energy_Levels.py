@@ -501,86 +501,61 @@ class MoleculeLevels(object):
         
         freqs = []
         state_info = []
-
+        
         if Ez==self.E0 and Bz==self.B0:
             evals,evecs = [self.evals0,self.evecs0]
         else:
             evals,evecs = self.eigensystem(Ez,Bz, set_attr=True)
+        
+        
+        state_index_array = np.array(state_index_array)
+        state_index_combi = np.array(list(it.combinations(state_index_array,2)))
+        
+        for i in range(len(state_index_combi)): 
+            
+            state_index_0 = state_index_combi[i][0]
+            evec0 = evecs[state_index_0]
+            energy0 = evals[state_index_0]
+            Parity0 = evec0@self.Parity_mat@evec0
+            
+            state_index_1 = state_index_combi[i][1]
+            evec1 = evecs[state_index_1]
+            energy1 = evals[state_index_1]
+            Parity1 = evec1@self.Parity_mat@evec1            
+            
+            M0 = self.q_numbers['M'][np.argmax(evec0**2)]
+            F0 = self.q_numbers['F'][np.argmax(evec0**2)]
+            M1 = self.q_numbers['M'][np.argmax(evec1**2)]
+            F1 = self.q_numbers['F'][np.argmax(evec1**2)]
+            
+            if (np.sign(Parity0*Parity1) == 1) and (np.sign(Parity0) == parity_sign) and (abs(M0-M1) in laser_polarization_M) and (abs(F0-F1) < 2):
+                freqs.append(abs(energy0-energy1))
 
-        # work with numpy arrays and precompute per-state metadata
-        state_index_array = np.array(state_index_array, dtype=int)
-        energies = np.array(evals)
-        # dominant basis index for each eigenvector
-        dominant_idx = np.argmax(evecs**2, axis=1)
-        # quantum numbers for dominant contributions
-        N_arr = np.array([self.q_numbers['N'][k] for k in dominant_idx])
-        M_arr = np.array([self.q_numbers['M'][k] for k in dominant_idx])
-        F_arr = np.array([self.q_numbers['F'][k] for k in dominant_idx])
-        # additional labels
-        if '174' in self.iso_state:
-            J_arr = np.array([self.q_numbers['J'][k] for k in dominant_idx])
-        else:
-            F1_arr = np.array([self.q_numbers['F1'][k] for k in dominant_idx])
-            G_arr = np.array([self.q_numbers['G'][k] for k in dominant_idx])
+                N0 = self.q_numbers['N'][np.argmax(evec0**2)]
 
-        # parity per state (vectorized): evec.T @ Parity_mat @ evec for each state
-        parity_vals = np.einsum('ij,jk,ik->i', evecs, self.Parity_mat, evecs)
-        parity_signs = np.sign(parity_vals)
+                if '174' in self.iso_state:
+                    J0 = self.q_numbers['J'][np.argmax(evec0**2)]
+                if '174' not in self.iso_state:
+                    F10 = self.q_numbers['F1'][np.argmax(evec0**2)]
+                    G0 = self.q_numbers['G'][np.argmax(evec0**2)]
+                    
+                N1 = self.q_numbers['N'][np.argmax(evec1**2)]
 
-        # restrict to provided indices and desired parity sign
-        candidate = np.intersect1d(state_index_array, np.where(parity_signs == parity_sign)[0])
-        if candidate.size == 0:
-            return freqs, state_info
-
-        # build subarrays for candidates
-        idx = candidate
-        E_sub = energies[idx]
-        M_sub = M_arr[idx]
-        F_sub = F_arr[idx]
-
-        # compute pairwise masks vectorized
-        diffM = np.abs(M_sub[:, None] - M_sub[None, :])
-        diffF = np.abs(F_sub[:, None] - F_sub[None, :])
-        mask_M = np.isin(diffM, laser_polarization_M)
-        mask_F = diffF < 2
-        pair_mask = mask_M & mask_F
-
-        # only keep upper triangle to avoid duplicates and self-pairs
-        iu, ju = np.triu_indices_from(pair_mask, k=1)
-        sel = pair_mask[iu, ju]
-        if not np.any(sel):
-            return freqs, state_info
-
-        pair_i = idx[iu[sel]]
-        pair_j = idx[ju[sel]]
-
-        # iterate only over filtered pairs and assemble results
-        for a, b in zip(pair_i, pair_j):
-            energy0 = energies[a]
-            energy1 = energies[b]
-            freqs.append(abs(energy0 - energy1))
-
-            N0 = N_arr[a]
-            N1 = N_arr[b]
-            M0 = M_arr[a]
-            M1 = M_arr[b]
-            F0 = F_arr[a]
-            F1 = F_arr[b]
-            Parity0 = parity_vals[a]
-            Parity1 = parity_vals[b]
-
-            if '174' in self.iso_state:
-                J0 = J_arr[a]
-                J1 = J_arr[b]
-                state_info.append({"freq": abs(energy0-energy1), "state index 0": int(a), "energy 0": float(energy0), "N0": int(N0), "J0": int(J0), "F0": int(F0), "M0": int(M0), "Parity0": float(Parity0), "state index 1": int(b), "energy 1": float(energy1), "N1": int(N1), "J1": int(J1), "F1": int(F1), "M1": int(M1), "Parity1": float(Parity1)})
-            else:
-                F10 = F1_arr[a]
-                F11 = F1_arr[b]
-                G0 = G_arr[a]
-                G1 = G_arr[b]
-                state_info.append({"freq": abs(energy0-energy1), "state index 0": int(a), "energy 0": float(energy0), "N0": int(N0), "G0": int(G0), "F10": int(F10), "F0": int(F0), "M0": int(M0), "Parity0": float(Parity0), "state index 1": int(b), "energy 1": float(energy1), "N1": int(N1), "G1": int(G1), "F11": int(F11), "F1": int(F1), "M1": int(M1), "Parity1": float(Parity1)})
-
-        return freqs, state_info
+                if '174' in self.iso_state:
+                    J1 = self.q_numbers['J'][np.argmax(evec1**2)]
+                    
+                    state_info.append({"freq": abs(energy0-energy1), "state index 0": state_index_0,"energy 0": energy0,"N0": N0, "J0": J0, "F0": F0, "M0": M0, "Parity0": Parity0,  "state index 1": state_index_1,"energy 1": energy1,"N1": N1, "J1": J1, "F1": F1, "M1": M1, "Parity1": Parity1})
+                    #state_info.append([state_index_0,N0,J0,F0,M0,state_index_1,N1,J1,F1,M1])
+                    
+                if '174' not in self.iso_state:
+                    F11 = self.q_numbers['F1'][np.argmax(evec1**2)]
+                    G1 = self.q_numbers['G'][np.argmax(evec1**2)]
+                    
+                    state_info.append({"freq": abs(energy0-energy1), "state index 0": state_index_0,"energy 0": energy0,"N0": N0, "G0": G0, "F10": F10, "F0": F0, "M0": M0, "Parity0": Parity0, "state index 1": state_index_1,"energy 1": energy1,"N1": N1, "G1": G1,  "F11": F11, "F1": F1, "M1": M1, "Parity1": Parity1})                    
+                    #state_info.append([state_index_0,N0,G0,F10,F0,M0,state_index_1,N1,G1,F11,F1,M1])
+                
+            
+        return  freqs, state_info
     
 
     def calculate_174_two_photon_Rabi_freq(self,Ez, Bz, state_index_array, J_e, laser_polarization_array, N_e = 1, spin_rotation_coupling_consider = True, round = 5, print_result = True):
@@ -5062,3 +5037,64 @@ def diagonalize(matrix,method='torch',order=False, Normalize=False,round=10):
         evecs = evecs[idx_order,:]
         evals = evals[idx_order]
     return evals,evecs
+
+
+# Simple in-memory cache for eigensystems computed for a given state and (Ez,Bz)
+_eigensystem_cache = {}
+
+def compute_eigensystems_for_state(state, EzBz_pairs, method='torch', round=10, use_cache=True):
+    """
+    Compute eigenpairs for multiple (Ez,Bz) pairs for a given `state`.
+
+    - `EzBz_pairs` is an iterable of (Ez, Bz) tuples.
+    - Uses the state's `H_function(Ez,Bz)` to build Hamiltonians, stacks them,
+      and calls `diagonalize_batch` once for all matrices.
+    - Optionally caches results in `_eigensystem_cache` keyed by
+      (state.iso_state, Ez, Bz, method, round).
+
+    Returns a list of (evals, evecs) tuples in the same order as input pairs.
+    """
+    pairs = list(EzBz_pairs)
+    results = [None] * len(pairs)
+    to_stack = []
+    to_stack_idx = []
+
+    for i, (Ez, Bz) in enumerate(pairs):
+        key = (getattr(state, 'iso_state', None), float(Ez), float(Bz), method, int(round))
+        if use_cache and key in _eigensystem_cache:
+            results[i] = _eigensystem_cache[key]
+        else:
+            # build H for this (Ez,Bz)
+            try:
+                H = state.H_function(Ez, Bz)
+            except TypeError:
+                # some H_function signatures include additional args (I_trap, theta_trap)
+                H = state.H_function(Ez, Bz, getattr(state, 'I_trap', None), getattr(state, 'theta_trap', None))
+            to_stack.append(np.array(H, dtype=float))
+            to_stack_idx.append((i, key))
+
+    if to_stack:
+        H_stack = np.stack(to_stack, axis=0)
+        evals_batch, evecs_batch = diagonalize_batch(H_stack, method=method, round=round)
+        for j, (i, key) in enumerate(to_stack_idx):
+            val = (evals_batch[j], evecs_batch[j])
+            if use_cache:
+                _eigensystem_cache[key] = val
+            results[i] = val
+
+    return results
+
+
+def build_H_stack_from_state(state, EzBz_pairs):
+    """Return a numpy array of stacked Hamiltonians for given (Ez,Bz) pairs."""
+    Hs = []
+    for Ez, Bz in EzBz_pairs:
+        try:
+            H = state.H_function(Ez, Bz)
+        except TypeError:
+            H = state.H_function(Ez, Bz, getattr(state, 'I_trap', None), getattr(state, 'theta_trap', None))
+        Hs.append(np.array(H, dtype=float))
+    if not Hs:
+        return np.empty((0,0,0), dtype=float)
+    return np.stack(Hs, axis=0)
+
