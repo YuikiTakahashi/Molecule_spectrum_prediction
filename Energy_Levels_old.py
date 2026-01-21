@@ -499,7 +499,22 @@ class MoleculeLevels(object):
         return
     
     
-    def calculate_two_photon_spectrum(self,Ez, Bz, state_index_array,laser_polarization = 'both', parity_sign = -1, round = 5):
+    def calculate_two_photon_spectrum(self,Ez, Bz, state_index_array,laser_polarization = 'both', parity_sign = 1, round = 5, allowed_transitions=None):
+        """
+        Calculate two-photon spectrum with optional transition filtering.
+        
+        Parameters:
+        -----------
+        allowed_transitions : list of tuples or None, optional
+            If provided, only calculate transitions between specific state index pairs.
+            Each tuple should be (lower_range, upper_range) where:
+            - lower_range: tuple (min, max) for lower state indices (inclusive)
+            - upper_range: tuple (min, max) for upper state indices (inclusive)
+            
+            Example: [((46, 55), (76, 83)), ((38, 45), (70, 75))]
+            This will only compute transitions from states 46-55 to 76-83, 
+            and from states 38-45 to 70-75.
+        """
         
         #print('this function only calculates transitions connecting same parity states')
         
@@ -552,6 +567,29 @@ class MoleculeLevels(object):
         deltaF = np.abs(F_array[idx_i] - F_array[idx_j]) < 2
 
         valid = Parity_mask & pol_mask & deltaF
+        
+        # Apply allowed_transitions filter if provided
+        if allowed_transitions is not None:
+            # Build a mask for allowed state index pairs
+            transition_mask = np.zeros_like(valid, dtype=bool)
+            
+            for (lower_range, upper_range) in allowed_transitions:
+                lower_min, lower_max = lower_range
+                upper_min, upper_max = upper_range
+                
+                # Get actual state indices (not positions in state_index_array)
+                state_i = state_index_array[idx_i]
+                state_j = state_index_array[idx_j]
+                
+                # Check both directions: (lower->upper) and (upper->lower)
+                forward = ((state_i >= lower_min) & (state_i <= lower_max) & 
+                          (state_j >= upper_min) & (state_j <= upper_max))
+                backward = ((state_j >= lower_min) & (state_j <= lower_max) & 
+                           (state_i >= upper_min) & (state_i <= upper_max))
+                
+                transition_mask |= (forward | backward)
+            
+            valid = valid & transition_mask
 
         if not np.any(valid):
             return [], []
