@@ -459,9 +459,9 @@ class MoleculeLevels(object):
     
     def calculate_two_photon_spectrum(self,Ez, Bz, state_index_array,laser_polarization = 'both', parity_sign = -1, round = 5):
         
-        print('this function only calculates transitions connecting same parity states')
+        #print('this function only calculates transitions connecting same parity states')
         
-        print('specify laser_polarization from both, orth, para ')
+        #print('specify laser_polarization from both, orth, para ')
         
         if laser_polarization in ['both']:
             laser_polarization_M = [0,1,2]
