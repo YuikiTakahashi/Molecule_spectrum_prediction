@@ -320,8 +320,8 @@ def H_odd_X(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all
     V_E_num = np.array(V_E).astype(np.float64)
     V_B_num = np.array(V_B).astype(np.float64)
     H_func = lambda E, B: H0_num + V_E_num * E + V_B_num * B
-    # Return a numeric SymPy matrix as placeholder; actual computation is via H_func
-    H_symbolic = sy.Matrix(H0_num)
+    # Return a minimal SymPy object for compatibility; actual computation is via H_func
+    H_symbolic = sy.Matrix(np.zeros((size, size)))  # Placeholder only
     return H_func, H_symbolic
 
 def H_odd_A(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all',precision=5):
@@ -350,8 +350,12 @@ def H_odd_A(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all
 
 
                     # params['bFH']*elements['I.S'] + params['cH']*np.sqrt(6)/3*elements['T2_0(IS)']
-        H_symbolic = sy.Matrix(H0)
-        H_func = sy.lambdify((Ez,Bz), H_symbolic, modules='numpy')
+        # Numeric assembly; avoid SymPy matrix construction
+        H0_num = np.array(H0).astype(np.float64)
+        V_E_num = np.array(V_E).astype(np.float64)
+        V_B_num = np.array(V_B).astype(np.float64)
+        H_func = lambda E,B: H0_num + V_E_num*E + V_B_num*B
+        H_symbolic = sy.Matrix(np.zeros((size, size)))  # Placeholder only
         return H_func,H_symbolic
     else:
         Ez,Bz = [E,B]
@@ -366,7 +370,7 @@ def H_odd_A(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all
                 state_out = {q+'0':q_numbers[q][i] for q in q_str}
                 state_in = {q+'1':q_numbers[q][j] for q in q_str}
                 q_args = {**state_out,**state_in}
-                elements = {term: _safe_element_call(element, q_args) for term, element in matrix_elements.items()}
+                elements = _get_elements_dict(matrix_elements, q_args)
                 H[i,j] = params['Be']*elements['N^2'] + SO*params['ASO']*elements['SO'] #+ \
                     # (params['bF']-params['c']/3)*elements['I.S'] + params['c']*elements['IzSz']+\
                     # params['g_L']*params['mu_B']*Bz*elements['ZeemanLZ']+params['g_S']*params['mu_B']*Bz*elements['ZeemanSZ'] +\
