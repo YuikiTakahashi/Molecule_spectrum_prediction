@@ -4,6 +4,20 @@ from functools import partial
 from molecule_parameters import params_general
 from matrix_elements import MQM_bBS, NSM_bBS, EDM_bBS, NSDPV_bBS, EDM_even_aBJ_3Delta1, Sz_bBJ,T2QM_bBS,b2a_matrix,decouple_b_even,bBS_2_bBJ_matrix,recouple_J_even,decouple_b_I_even
 
+
+def _safe_element_call(element, q_args):
+    try:
+        return element(**q_args)
+    except Exception as e:
+        import traceback
+        name = getattr(element, "__name__", str(element))
+        print(f"Error evaluating matrix element '{name}' with q_args:")
+        # print keys sorted for readability
+        for k in sorted(q_args.keys()):
+            print(f"  {k}: {q_args[k]!r}")
+        traceback.print_exc()
+        raise
+
 def H_even_X(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all',precision=5,trap=False,theta_num=None):
     q_str = list(q_numbers)     # Get keys for quantum number dict
     if symbolic:
@@ -40,7 +54,7 @@ def H_even_X(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='al
                 state_out = {q+'0':q_numbers[q][i] for q in q_str}
                 state_in = {q+'1':q_numbers[q][j] for q in q_str}
                 q_args = {**state_out,**state_in}
-                elements = {term: sy.N(element(**q_args)) for term, element in matrix_elements.items()}
+                elements = {term: sy.N(_safe_element_call(element, q_args)) for term, element in matrix_elements.items()}
                 # The Hamiltonian
                 H0[i][j] = params['Be']*elements['N^2'] + params['Gamma_SR']*elements['N.S'] + \
                     params['bF']*elements['I.S'] + params['c']/3*np.sqrt(6)*elements['T2_0(I,S)']
@@ -138,7 +152,7 @@ def H_even_A(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='al
                 state_out = {q+'0':q_numbers[q][i] for q in q_str}
                 state_in = {q+'1':q_numbers[q][j] for q in q_str}
                 q_args = {**state_out,**state_in}
-                elements = {term: element(**q_args) for term, element in matrix_elements.items()}
+                elements = {term: _safe_element_call(element, q_args) for term, element in matrix_elements.items()}
                 H0[i][j] = params['Be']*elements['N^2'] + params['ASO']*elements['SO'] + \
                     params['bF']*elements['I.S'] + params['c']*np.sqrt(6)/3*elements['T2_0(IS)']+\
                     params['p+2q']*elements['Lambda Doubling p+2q'] - params['q']*elements['Lambda Doubling q']
@@ -197,7 +211,7 @@ def H_even_3Delta1(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_valu
                 state_out = {q+'0':q_numbers[q][i] for q in q_str}
                 state_in = {q+'1':q_numbers[q][j] for q in q_str}
                 q_args = {**state_out,**state_in}
-                elements = {term: element(**q_args) for term, element in matrix_elements.items()}
+                elements = {term: _safe_element_call(element, q_args) for term, element in matrix_elements.items()}
                 H0[i][j] = params['Be']*elements['J^2'] + \
                     params['A_parallel']*elements['A_parallel HF'] + params['Omega']*elements['Omega Doubling']
                 if M_values!='none':
@@ -219,48 +233,51 @@ def H_even_3Delta1(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_valu
 # See documentation for H_174X
 def H_odd_X(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all',precision=5):
     q_str = list(q_numbers)
-    Ez,Bz = sy.symbols('E_z B_z')
+    Ez, Bz = sy.symbols('E_z B_z')
     size = len(q_numbers[q_str[0]])
-    H0 = np.zeros((size,size)).tolist()
-    V_B = np.zeros((size,size)).tolist()
-    V_E = np.zeros((size,size)).tolist()
+    H0 = np.zeros((size, size)).tolist()
+    V_B = np.zeros((size, size)).tolist()
+    V_E = np.zeros((size, size)).tolist()
+
     for i in range(size):
         for j in range(size):
-            state_out = {q+'0':q_numbers[q][i] for q in q_str}
-            state_in = {q+'1':q_numbers[q][j] for q in q_str}
-            q_args = {**state_out,**state_in}
-            elements = {term: element(**q_args) for term, element in matrix_elements.items()}
-            H0[i][j] = params['Be']*elements['N^2'] + params['Gamma_SR']*elements['N.S'] + \
-                params['bFYb']*elements['IM.S'] + np.sqrt(6)/3*params['cYb']*elements['T2_0(IM,S)'] +\
-                params['bFH']*elements['IH.S']  + np.sqrt(6)/3*params['cH']*elements['T2_0(IH,S)']            
-            
-            '''
-            #old, modified by Yuiki on 11/16/2022 because I changed the factor for 'T2_0(IH,S)' so we get the same '+ np.sqrt(6)/3' factor in front of 'cH' parameter as 'cYb'.
-            H0[i][j] = params['Be']*elements['N^2'] + params['Gamma_SR']*elements['N.S'] + \
-                params['bFYb']*elements['IM.S'] + np.sqrt(6)/3*params['cYb']*elements['T2_0(IM,S)'] +\
-                params['bFH']*elements['IH.S'] + (-np.sqrt(10))*params['cH']/3*elements['T2_0(IH,S)']
-            '''
-            
+            state_out = {q + '0': q_numbers[q][i] for q in q_str}
+            state_in = {q + '1': q_numbers[q][j] for q in q_str}
+            q_args = {**state_out, **state_in}
+            elements = {term: _safe_element_call(element, q_args) for term, element in matrix_elements.items()}
+
+            H0[i][j] = (
+                params['Be'] * elements['N^2']
+                + params['Gamma_SR'] * elements['N.S']
+                + params['bFYb'] * elements['IM.S']
+                + np.sqrt(6) / 3 * params['cYb'] * elements['T2_0(IM,S)']
+                + params['bFH'] * elements['IH.S']
+                + np.sqrt(6) / 3 * params['cH'] * elements['T2_0(IH,S)']
+            )
+
             if M_values != 'none':
-                V_B[i][j]+=params['g_S_eff']*params['mu_B']*elements['ZeemanZ']
-                V_E[i][j]+= - params['muE']*elements['StarkZ']
+                V_B[i][j] += params['g_S_eff'] * params['mu_B'] * elements['ZeemanZ']
+                V_E[i][j] += -params['muE'] * elements['StarkZ']
+
             if params.get('q_lD') is not None:
-                H0[i][j] += params['p_lD']*elements['l doubling p'] - params['q_lD']*elements['l doubling q'] -params['Gamma_SR']*elements['NzSz']+params['Gamma_Prime']*elements['NzSz']
-                
-                '''
-                #old, modified by Yuiki on 11/16/2022
-                H0[i][j] +=  - params['q_lD']/2*elements['l doubling'] -params['Gamma_SR']*elements['NzSz']+params['Gamma_Prime']*elements['NzSz'] 
-                '''
-                
-            if params['e2Qq0'] !=0:
-                H0[i][j]+= np.sqrt(6)/(4*5/2*(2*5/2-1))*params['e2Qq0']*elements['T2_0(IM^2)']
-            # H[i][j] = round(H[i][j],precision)
-    H_symbolic = sy.Matrix(H0)+Ez*sy.Matrix(V_E)+Bz*sy.Matrix(V_B)
+                H0[i][j] += (
+                    params['p_lD'] * elements['l doubling p']
+                    - params['q_lD'] * elements['l doubling q']
+                    - params['Gamma_SR'] * elements['NzSz']
+                    + params['Gamma_Prime'] * elements['NzSz']
+                )
+
+            if params.get('e2Qq0', 0) != 0:
+                H0[i][j] += (
+                    np.sqrt(6) / (4 * 5 / 2 * (2 * 5 / 2 - 1)) * params['e2Qq0'] * elements['T2_0(IM^2)']
+                )
+
+    H_symbolic = sy.Matrix(H0) + Ez * sy.Matrix(V_E) + Bz * sy.Matrix(V_B)
     H0_num = np.array(H0).astype(np.float64)
     V_E_num = np.array(V_E).astype(np.float64)
     V_B_num = np.array(V_B).astype(np.float64)
-    H_func = lambda E,B: H0_num + V_E_num*E + V_B_num*B
-    return H_func,H_symbolic
+    H_func = lambda E, B: H0_num + V_E_num * E + V_B_num * B
+    return H_func, H_symbolic
 
 def H_odd_A(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all',precision=5):
     q_str = list(q_numbers)
@@ -275,7 +292,7 @@ def H_odd_A(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all
                 state_out = {q+'0':q_numbers[q][i] for q in q_str}
                 state_in = {q+'1':q_numbers[q][j] for q in q_str}
                 q_args = {**state_out,**state_in}
-                elements = {term: element(**q_args) for term, element in matrix_elements.items()}
+                elements = {term: _safe_element_call(element, q_args) for term, element in matrix_elements.items()}
                 H0[i][j] = params['Be']*elements['N^2'] + params['ASO']*elements['SO']+\
                     params['h1/2Yb']*elements['IzLz_M'] - params['dYb']*elements['T2_2(IS)_M']+\
                     params['p+2q']*elements['Lambda-Doubling']
@@ -304,7 +321,7 @@ def H_odd_A(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all
                 state_out = {q+'0':q_numbers[q][i] for q in q_str}
                 state_in = {q+'1':q_numbers[q][j] for q in q_str}
                 q_args = {**state_out,**state_in}
-                elements = {term: element(**q_args) for term, element in matrix_elements.items()}
+                elements = {term: _safe_element_call(element, q_args) for term, element in matrix_elements.items()}
                 H[i,j] = params['Be']*elements['N^2'] + SO*params['ASO']*elements['SO'] #+ \
                     # (params['bF']-params['c']/3)*elements['I.S'] + params['c']*elements['IzSz']+\
                     # params['g_L']*params['mu_B']*Bz*elements['ZeemanLZ']+params['g_S']*params['mu_B']*Bz*elements['ZeemanSZ'] +\

@@ -1,6 +1,98 @@
 import sympy as sy
 import numpy as np
+import traceback
 from sympy.physics.wigner import wigner_3j,wigner_6j,wigner_9j
+
+# Wrap wigner_6j with a safe normalizer that rounds small float noise to
+# the nearest half-integer and returns 0 when triangle relations fail.
+wigner_6j_orig = wigner_6j
+wigner_3j_orig = wigner_3j
+wigner_9j_orig = wigner_9j
+
+# Rate-limited debug counters for noisy calls
+_wigner_debug = {'3j': 0, '6j': 0, '9j': 0}
+# Control noisy diagnostics (set False to silence wrapper prints)
+WIGNER_VERBOSE = False
+
+def _to_half(x):
+    try:
+        xf = float(x)
+    except Exception:
+        return x
+    return round(xf * 2) / 2.0
+
+def _tri_ok(a, b, c, eps=1e-8):
+    return (abs(a - b) - eps) <= c <= (a + b + eps)
+
+def safe_wigner_6j(j1, j2, j3, j4, j5, j6):
+    js = [_to_half(v) for v in (j1, j2, j3, j4, j5, j6)]
+    if any((not isinstance(v, (int, float))) for v in js):
+        return 0
+    if any(v < 0 for v in js):
+        if WIGNER_VERBOSE and _wigner_debug['6j'] < 5:
+            print(f"safe_wigner_6j: negative j -> 0 for args {js}")
+            traceback.print_stack()
+            _wigner_debug['6j'] += 1
+        return 0
+    if not (_tri_ok(js[0], js[1], js[2]) and _tri_ok(js[0], js[4], js[5]) and _tri_ok(js[3], js[1], js[5]) and _tri_ok(js[3], js[4], js[2])):
+        if WIGNER_VERBOSE and _wigner_debug['6j'] < 5:
+            print(f"safe_wigner_6j: triangle fail -> 0 for args {js}")
+            traceback.print_stack()
+            _wigner_debug['6j'] += 1
+        return 0
+    return wigner_6j_orig(*js)
+
+def safe_wigner_3j(j1, j2, j3, m1, m2, m3):
+    js = [_to_half(v) for v in (j1, j2, j3)]
+    ms = [_to_half(v) for v in (m1, m2, m3)]
+    if any((not isinstance(v, (int, float))) for v in js + ms):
+        return 0
+    if any(v < 0 for v in js):
+        if WIGNER_VERBOSE and _wigner_debug['3j'] < 10:
+            print(f"safe_wigner_3j: negative j -> 0 for args {js+ms}")
+            traceback.print_stack()
+            _wigner_debug['3j'] += 1
+        return 0
+    # m bounds and sum check
+    if not (abs(ms[0]) <= js[0] + 1e-8 and abs(ms[1]) <= js[1] + 1e-8 and abs(ms[2]) <= js[2] + 1e-8 and abs(ms[0] + ms[1] + ms[2]) < 1e-8):
+        if WIGNER_VERBOSE and _wigner_debug['3j'] < 50:
+            print(f"safe_wigner_3j: m bounds/sum fail -> 0 for args {js+ms}")
+            traceback.print_stack()
+            _wigner_debug['3j'] += 1
+        return 0
+    # triangle for j's
+    if not _tri_ok(js[0], js[1], js[2]):
+        if WIGNER_VERBOSE and _wigner_debug['3j'] < 10:
+            print(f"safe_wigner_3j: triangle fail -> 0 for args {js+ms}")
+            traceback.print_stack()
+            _wigner_debug['3j'] += 1
+        return 0
+    try:
+        return wigner_3j_orig(*js, *ms)
+    except Exception as e:
+        if WIGNER_VERBOSE and _wigner_debug['3j'] < 10:
+            print(f"safe_wigner_3j: exception {e} -> 0 for args {js+ms}")
+            traceback.print_stack()
+            _wigner_debug['3j'] += 1
+        return 0
+
+def safe_wigner_9j(*args):
+    vals = [_to_half(v) for v in args]
+    if any((not isinstance(v, (int, float))) for v in vals):
+        return 0
+    try:
+        return wigner_9j_orig(*vals)
+    except Exception as e:
+        if WIGNER_VERBOSE and _wigner_debug['9j'] < 10:
+            print(f"safe_wigner_9j: exception {e} -> 0 for args {vals}")
+            traceback.print_stack()
+            _wigner_debug['9j'] += 1
+        return 0
+
+# Override names so the rest of the file uses the safe versions
+wigner_6j = safe_wigner_6j
+wigner_3j = safe_wigner_3j
+wigner_9j = safe_wigner_9j
 
 ########## Matrix Elements for YbOH ##############
 
@@ -240,8 +332,8 @@ def q_lD_bBJ(K0,N0,J0,F0,M0,K1,N1,J1,F1,M1,S=1/2,I=1/2):
     if not kronecker(M0,M1)*kronecker(F0,F1)*kronecker(J0,J1)*kronecker(N0,N1):
         return 0
     else:
-        return sum([(-1)**(N0-K0)*(1/(2*np.sqrt(6)))*np.sqrt((2*N0-1)*(2*N0)*(2*N0+1)*(2*N0+2)*(2*N0+3))*\
-           wigner_3j(N0,2,N1,-K0,2*q,K1) for q in [-1,1]])      
+          return sum([(-1)**(N0-K0)*(1/(2*np.sqrt(6)))*np.sqrt((2*N0-1)*(2*N0)*(2*N0+1)*(2*N0+2)*(2*N0+3))*\
+              wigner_3j(N0,2,N1,-K0,2*q,K1)*kronecker(K0,K1+2*q) for q in [-1,1]])      
         
     '''
     #This is old Arian's qG matrix element

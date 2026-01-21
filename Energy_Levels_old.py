@@ -10,7 +10,15 @@ from copy import deepcopy
 # import multiprocessing as mp
 from functools import partial
 from time import perf_counter
-import torch
+
+# Try importing torch, but don't fail if it's not available
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    torch = None
+
 from hamiltonian_builders import tensor_matrix
 from sympy.physics.wigner import wigner_3j, wigner_6j
 
@@ -135,10 +143,44 @@ class MoleculeLevels(object):
         else:
             self.theta_trap = self.theta_num
         # Find free field eigenvalues and eigenvectors
-        if self.M_values == 'all' or self.M_values == 'pos':
-            self.eigensystem(0,1e-6)
-        else:
-            self.eigensystem(0,0)
+        # Use numpy method during initialization for stability (torch can be used later)
+        # Check matrix size first to avoid memory issues
+        H_matrix = self.H_function(0, 1e-6 if (self.M_values == 'all' or self.M_values == 'pos') else 0)
+        matrix_size = H_matrix.shape[0]
+        
+        if matrix_size > 10000:
+            print(f"Warning: Large matrix size ({matrix_size}x{matrix_size}). This may take a while or cause memory issues.")
+        
+        try:
+            if self.M_values == 'all' or self.M_values == 'pos':
+                self.eigensystem(0,1e-6, method='numpy', order=False)
+            else:
+                self.eigensystem(0,0, method='numpy', order=False)
+        except MemoryError:
+            print(f"Error: Not enough memory for {matrix_size}x{matrix_size} matrix diagonalization.")
+            print("Try reducing N_range or M_values, or use a machine with more memory.")
+            raise
+        except Exception as e:
+            # If numpy fails, try scipy as fallback
+            print(f"Warning: numpy diagonalization failed: {e}")
+            print("Attempting with scipy...")
+            try:
+                if self.M_values == 'all' or self.M_values == 'pos':
+                    self.eigensystem(0,1e-6, method='scipy', order=False)
+                else:
+                    self.eigensystem(0,0, method='scipy', order=False)
+            except Exception as e2:
+                # Last resort: try torch if available
+                print(f"Warning: scipy diagonalization failed: {e2}")
+                print("Attempting with torch (if available)...")
+                try:
+                    if self.M_values == 'all' or self.M_values == 'pos':
+                        self.eigensystem(0,1e-6, method='torch', order=False)
+                    else:
+                        self.eigensystem(0,0, method='torch', order=False)
+                except Exception as e3:
+                    print(f"Error: All diagonalization methods failed. Last error: {e3}")
+                    raise RuntimeError(f"Could not diagonalize {matrix_size}x{matrix_size} matrix with any method.") from e3
         self.size = len(self.evecs0)
         self.Parity_mat = self.library.all_parity[self.iso_state](self.q_numbers,self.q_numbers)
         self.generate_parities(self.evecs0)
@@ -4991,9 +5033,14 @@ def diagonalize_batch(matrix_array,method='torch',round=10):
     elif method == 'scipy':
         w,v = sciLA.eigh(matrix_array)
     elif method == 'torch':
-        w,v = torch.linalg.eigh(torch.from_numpy(matrix_array))
-        w = w.numpy()
-        v = v.numpy()
+        if not TORCH_AVAILABLE:
+            print("Warning: torch not available, using numpy for batch diagonalization")
+            w,v = npLA.eigh(matrix_array)
+        else:
+            w,v = torch.linalg.eigh(torch.from_numpy(matrix_array))
+            # Use detach().cpu().numpy() to safely convert tensor to numpy
+            w = w.detach().cpu().numpy()
+            v = v.detach().cpu().numpy()
     evals_batch = np.round(w,round)
     evecs_batch= np.round(np.transpose(v,[0,2,1]),round)
     return evals_batch,evecs_batch
@@ -5005,16 +5052,82 @@ def diagonalize(matrix,method='torch',order=False, Normalize=False,round=10):
     elif method == 'scipy':
         w,v = sciLA.eigh(matrix)
     elif method == 'torch':
-        w,v = torch.linalg.eigh(torch.from_numpy(matrix))
-        w = w.numpy()
-        v = v.numpy()
+        if not TORCH_AVAILABLE:
+            print("Warning: torch not available, using numpy for diagonalization")
+            w,v = npLA.eigh(matrix)
+        else:
+            w,v = torch.linalg.eigh(torch.from_numpy(matrix))
+            # Use detach().cpu().numpy() to safely convert tensor to numpy
+            w = w.detach().cpu().numpy()
+            v = v.detach().cpu().numpy()
     evals = np.round(w,round)
     evecs = np.round(v.T,round)
     # if Normalize:
     #     for i,evec in enumerate(evecs):
     #         evecs[i]/=evec@evec
-    # if order:
-    #     idx_order = np.argsort(evals)
-    #     evecs =evecs[idx_order,:]
-    #     evals = evals[idx_order]
+    if order:
+        idx_order = np.argsort(evals)
+        evecs = evecs[idx_order,:]
+        evals = evals[idx_order]
     return evals,evecs
+
+
+# Simple in-memory cache for eigensystems computed for a given state and (Ez,Bz)
+_eigensystem_cache = {}
+
+def compute_eigensystems_for_state(state, EzBz_pairs, method='torch', round=10, use_cache=True):
+    """
+    Compute eigenpairs for multiple (Ez,Bz) pairs for a given `state`.
+
+    - `EzBz_pairs` is an iterable of (Ez, Bz) tuples.
+    - Uses the state's `H_function(Ez,Bz)` to build Hamiltonians, stacks them,
+      and calls `diagonalize_batch` once for all matrices.
+    - Optionally caches results in `_eigensystem_cache` keyed by
+      (state.iso_state, Ez, Bz, method, round).
+
+    Returns a list of (evals, evecs) tuples in the same order as input pairs.
+    """
+    pairs = list(EzBz_pairs)
+    results = [None] * len(pairs)
+    to_stack = []
+    to_stack_idx = []
+
+    for i, (Ez, Bz) in enumerate(pairs):
+        key = (getattr(state, 'iso_state', None), float(Ez), float(Bz), method, int(round))
+        if use_cache and key in _eigensystem_cache:
+            results[i] = _eigensystem_cache[key]
+        else:
+            # build H for this (Ez,Bz)
+            try:
+                H = state.H_function(Ez, Bz)
+            except TypeError:
+                # some H_function signatures include additional args (I_trap, theta_trap)
+                H = state.H_function(Ez, Bz, getattr(state, 'I_trap', None), getattr(state, 'theta_trap', None))
+            to_stack.append(np.array(H, dtype=float))
+            to_stack_idx.append((i, key))
+
+    if to_stack:
+        H_stack = np.stack(to_stack, axis=0)
+        evals_batch, evecs_batch = diagonalize_batch(H_stack, method=method, round=round)
+        for j, (i, key) in enumerate(to_stack_idx):
+            val = (evals_batch[j], evecs_batch[j])
+            if use_cache:
+                _eigensystem_cache[key] = val
+            results[i] = val
+
+    return results
+
+
+def build_H_stack_from_state(state, EzBz_pairs):
+    """Return a numpy array of stacked Hamiltonians for given (Ez,Bz) pairs."""
+    Hs = []
+    for Ez, Bz in EzBz_pairs:
+        try:
+            H = state.H_function(Ez, Bz)
+        except TypeError:
+            H = state.H_function(Ez, Bz, getattr(state, 'I_trap', None), getattr(state, 'theta_trap', None))
+        Hs.append(np.array(H, dtype=float))
+    if not Hs:
+        return np.empty((0,0,0), dtype=float)
+    return np.stack(Hs, axis=0)
+
