@@ -2,12 +2,38 @@ import sympy as sy
 import numpy as np
 import traceback
 from sympy.physics.wigner import wigner_3j,wigner_6j,wigner_9j
+from functools import lru_cache
 
 # Wrap wigner_6j with a safe normalizer that rounds small float noise to
 # the nearest half-integer and returns 0 when triangle relations fail.
 wigner_6j_orig = wigner_6j
 wigner_3j_orig = wigner_3j
 wigner_9j_orig = wigner_9j
+
+# Numeric cached wrappers (keys use doubled half-integers as integers to avoid float hashing issues)
+@lru_cache(maxsize=200000)
+def _wigner_6j_cached(i1, i2, i3, i4, i5, i6):
+    try:
+        args = [v/2.0 for v in (i1, i2, i3, i4, i5, i6)]
+        return float(wigner_6j_orig(*args))
+    except Exception:
+        return 0.0
+
+@lru_cache(maxsize=200000)
+def _wigner_3j_cached(i1, i2, i3, m1_i, m2_i, m3_i):
+    try:
+        args = [i1/2.0, i2/2.0, i3/2.0, m1_i/2.0, m2_i/2.0, m3_i/2.0]
+        return float(wigner_3j_orig(*args))
+    except Exception:
+        return 0.0
+
+@lru_cache(maxsize=50000)
+def _wigner_9j_cached(i1, i2, i3, i4, i5, i6, i7, i8, i9):
+    try:
+        args = [v/2.0 for v in (i1, i2, i3, i4, i5, i6, i7, i8, i9)]
+        return float(wigner_9j_orig(*args))
+    except Exception:
+        return 0.0
 
 # Rate-limited debug counters for noisy calls
 _wigner_debug = {'3j': 0, '6j': 0, '9j': 0}
@@ -40,7 +66,9 @@ def safe_wigner_6j(j1, j2, j3, j4, j5, j6):
             traceback.print_stack()
             _wigner_debug['6j'] += 1
         return 0
-    return wigner_6j_orig(*js)
+    # use integer doubled half-integer keys for caching
+    js_int = tuple(int(round(x * 2)) for x in js)
+    return _wigner_6j_cached(*js_int)
 
 def safe_wigner_3j(j1, j2, j3, m1, m2, m3):
     js = [_to_half(v) for v in (j1, j2, j3)]
@@ -67,27 +95,16 @@ def safe_wigner_3j(j1, j2, j3, m1, m2, m3):
             traceback.print_stack()
             _wigner_debug['3j'] += 1
         return 0
-    try:
-        return wigner_3j_orig(*js, *ms)
-    except Exception as e:
-        if WIGNER_VERBOSE and _wigner_debug['3j'] < 10:
-            print(f"safe_wigner_3j: exception {e} -> 0 for args {js+ms}")
-            traceback.print_stack()
-            _wigner_debug['3j'] += 1
-        return 0
+    # use integer doubled half-integer keys for caching
+    js_int = tuple(int(round(x * 2)) for x in js + ms)
+    return _wigner_3j_cached(*js_int)
 
 def safe_wigner_9j(*args):
     vals = [_to_half(v) for v in args]
     if any((not isinstance(v, (int, float))) for v in vals):
         return 0
-    try:
-        return wigner_9j_orig(*vals)
-    except Exception as e:
-        if WIGNER_VERBOSE and _wigner_debug['9j'] < 10:
-            print(f"safe_wigner_9j: exception {e} -> 0 for args {vals}")
-            traceback.print_stack()
-            _wigner_debug['9j'] += 1
-        return 0
+    js_int = tuple(int(round(x * 2)) for x in vals)
+    return _wigner_9j_cached(*js_int)
 
 # Override names so the rest of the file uses the safe versions
 wigner_6j = safe_wigner_6j
@@ -106,11 +123,9 @@ molecule gets a separate dictionary. Dictionaries are at the end of the file.
 
 
 
-def kronecker(a,b):         # Kronecker delta function
-    if a==b:
-        return 1
-    else:
-        return 0
+def kronecker(a, b):
+    """Kronecker delta function: returns 1 if a==b, else 0. Highly optimized for frequent calls."""
+    return int(a == b)
 
 def b2a_matrix(a,b,S=1/2):
     if not kronecker(a['K'],b['K'])*kronecker(a['J'],b['J'])*kronecker(a['F'],b['F'])*kronecker(a['M'],b['M']):

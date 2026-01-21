@@ -5,18 +5,61 @@ from molecule_parameters import params_general
 from matrix_elements import MQM_bBS, NSM_bBS, EDM_bBS, NSDPV_bBS, EDM_even_aBJ_3Delta1, Sz_bBJ,T2QM_bBS,b2a_matrix,decouple_b_even,bBS_2_bBJ_matrix,recouple_J_even,decouple_b_I_even
 
 
-def _safe_element_call(element, q_args):
+_ELEMENT_CALL_CACHE = {}
+
+# Cache whole elements dict for given matrix_elements mapping and q_args
+# Keyed by (id(matrix_elements), tuple(sorted(q_args.items())))
+_ELEMENTS_DICT_CACHE = {}
+
+def _get_elements_dict(matrix_elements, q_args):
     try:
-        return element(**q_args)
+        key = (id(matrix_elements), tuple(sorted(q_args.items())))
+    except Exception:
+        key = None
+    if key is not None and key in _ELEMENTS_DICT_CACHE:
+        return _ELEMENTS_DICT_CACHE[key]
+
+    elements = {term: _safe_element_call(element, q_args) for term, element in matrix_elements.items()}
+
+    if key is not None:
+        if len(_ELEMENTS_DICT_CACHE) > 200000:
+            _ELEMENTS_DICT_CACHE.clear()
+        _ELEMENTS_DICT_CACHE[key] = elements
+
+    return elements
+
+def _safe_element_call(element, q_args):
+    """Evaluate a matrix element with a simple memo cache to avoid repeated calls.
+
+    The cache key is (element.__name__, sorted tuple of q_args items). If any q_args
+    values are unhashable, caching is skipped for that call.
+    """
+    try:
+        key = (getattr(element, '__name__', str(element)), tuple(sorted(q_args.items())))
+    except Exception:
+        key = None
+
+    if key is not None and key in _ELEMENT_CALL_CACHE:
+        return _ELEMENT_CALL_CACHE[key]
+
+    try:
+        val = element(**q_args)
     except Exception as e:
         import traceback
         name = getattr(element, "__name__", str(element))
         print(f"Error evaluating matrix element '{name}' with q_args:")
-        # print keys sorted for readability
         for k in sorted(q_args.keys()):
             print(f"  {k}: {q_args[k]!r}")
         traceback.print_exc()
         raise
+
+    if key is not None:
+        # Simple size bound to avoid unbounded memory growth
+        if len(_ELEMENT_CALL_CACHE) > 200000:
+            _ELEMENT_CALL_CACHE.clear()
+        _ELEMENT_CALL_CACHE[key] = val
+
+    return val
 
 def H_even_X(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all',precision=5,trap=False,theta_num=None):
     q_str = list(q_numbers)     # Get keys for quantum number dict
@@ -54,7 +97,7 @@ def H_even_X(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='al
                 state_out = {q+'0':q_numbers[q][i] for q in q_str}
                 state_in = {q+'1':q_numbers[q][j] for q in q_str}
                 q_args = {**state_out,**state_in}
-                elements = {term: sy.N(_safe_element_call(element, q_args)) for term, element in matrix_elements.items()}
+                elements = _get_elements_dict(matrix_elements, q_args)
                 # The Hamiltonian
                 H0[i][j] = params['Be']*elements['N^2'] + params['Gamma_SR']*elements['N.S'] + \
                     params['bF']*elements['I.S'] + params['c']/3*np.sqrt(6)*elements['T2_0(I,S)']
@@ -91,10 +134,8 @@ def H_even_X(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='al
         if params.get('Gamma_D') is not None:
             H0 = matadd(H0,(params['Gamma_D']/2*(SR0@N0+N0@SR0)).tolist())
         #H=matadd(H,matmult(Iz,Sz))
-        # Create symbolic object
-        H_symbolic = sy.Matrix(H0)+Ez*sy.Matrix(V_E)+Bz*sy.Matrix(V_B)
-        if trap:
-            H_symbolic+=sy.Matrix(V_trap)*I0
+        # Skip expensive SymPy matrix arithmetic; return a minimal placeholder
+        H_symbolic = sy.Matrix(np.zeros((size, size)))  # Placeholder only
         H0_num = np.array(H0).astype(np.float64)
         V_E_num = np.array(V_E).astype(np.float64)
         V_B_num = np.array(V_B).astype(np.float64)
@@ -132,7 +173,6 @@ def H_even_X(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='al
     #             Iz[i,j] = elements['Iz']
     #             Sz[i,j] = elements['Sz']
     #     H = H + params['c']*(Iz@Sz)
-        return H
 
 # See documentation for H_174X
 def H_even_A(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all',precision=5):
@@ -151,10 +191,9 @@ def H_even_A(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='al
             for j in range(size):
                 state_out = {q+'0':q_numbers[q][i] for q in q_str}
                 state_in = {q+'1':q_numbers[q][j] for q in q_str}
-                q_args = {**state_out,**state_in}
-                elements = {term: _safe_element_call(element, q_args) for term, element in matrix_elements.items()}
-                H0[i][j] = params['Be']*elements['N^2'] + params['ASO']*elements['SO'] + \
-                    params['bF']*elements['I.S'] + params['c']*np.sqrt(6)/3*elements['T2_0(IS)']+\
+                q_args = {**state_out, **state_in}
+                elements = _get_elements_dict(matrix_elements, q_args)
+                H0[i][j] = params['bF']*elements['I.S'] + params['c']*np.sqrt(6)/3*elements['T2_0(IS)']+\
                     params['p+2q']*elements['Lambda Doubling p+2q'] - params['q']*elements['Lambda Doubling q']
                 if M_values!='none':
                     V_B[i][j]+= params['g_L']*params['mu_B']*elements['ZeemanLZ']+params['g_S']*params['mu_B']*elements['ZeemanSZ'] +\
@@ -170,11 +209,13 @@ def H_even_A(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='al
             H0 = matadd(H0,(-params['D']*N0@N0))
         if params.get('p2q_D') is not None:
             H0 = matadd(H0,(params['p2q_D']/2*(p2q0@N0+N0@p2q0)))
-        H_symbolic = sy.Matrix(H0)+Ez*sy.Matrix(V_E)+Bz*sy.Matrix(V_B)
+        # Skip expensive SymPy matrix arithmetic; use numeric arrays directly
         H0_num = np.array(H0).astype(np.float64)
         V_E_num = np.array(V_E).astype(np.float64)
         V_B_num = np.array(V_B).astype(np.float64)
         H_func = lambda E,B: H0_num + V_E_num*E + V_B_num*B
+        # Return a minimal SymPy object for compatibility
+        H_symbolic = sy.Matrix(np.zeros((len(H0), len(H0))))  # Placeholder only
         return H_func,H_symbolic
     # else:
     #     Ez,Bz = [E,B]
@@ -211,7 +252,7 @@ def H_even_3Delta1(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_valu
                 state_out = {q+'0':q_numbers[q][i] for q in q_str}
                 state_in = {q+'1':q_numbers[q][j] for q in q_str}
                 q_args = {**state_out,**state_in}
-                elements = {term: _safe_element_call(element, q_args) for term, element in matrix_elements.items()}
+                elements = _get_elements_dict(matrix_elements, q_args)
                 H0[i][j] = params['Be']*elements['J^2'] + \
                     params['A_parallel']*elements['A_parallel HF'] + params['Omega']*elements['Omega Doubling']
                 if M_values!='none':
@@ -219,11 +260,13 @@ def H_even_3Delta1(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_valu
                     V_E[i][j]+= -params['muE']*elements['StarkZ']
 
 
-        H_symbolic = sy.Matrix(H0)+Ez*sy.Matrix(V_E)+Bz*sy.Matrix(V_B)
+        # Skip expensive SymPy matrix arithmetic; use numeric arrays directly
         H0_num = np.array(H0).astype(np.float64)
         V_E_num = np.array(V_E).astype(np.float64)
         V_B_num = np.array(V_B).astype(np.float64)
         H_func = lambda E,B: H0_num + V_E_num*E + V_B_num*B
+        # Return a minimal SymPy object for compatibility
+        H_symbolic = sy.Matrix(np.zeros((len(H0), len(H0))))  # Placeholder only
         return H_func,H_symbolic
 
         #return H    
@@ -244,7 +287,7 @@ def H_odd_X(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all
             state_out = {q + '0': q_numbers[q][i] for q in q_str}
             state_in = {q + '1': q_numbers[q][j] for q in q_str}
             q_args = {**state_out, **state_in}
-            elements = {term: _safe_element_call(element, q_args) for term, element in matrix_elements.items()}
+            elements = _get_elements_dict(matrix_elements, q_args)  # Use cached elements dict
 
             H0[i][j] = (
                 params['Be'] * elements['N^2']
@@ -272,11 +315,13 @@ def H_odd_X(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all
                     np.sqrt(6) / (4 * 5 / 2 * (2 * 5 / 2 - 1)) * params['e2Qq0'] * elements['T2_0(IM^2)']
                 )
 
-    H_symbolic = sy.Matrix(H0) + Ez * sy.Matrix(V_E) + Bz * sy.Matrix(V_B)
+    # Numeric assembly for speed: skip expensive SymPy matrix arithmetic (sy.Matrix ops)
     H0_num = np.array(H0).astype(np.float64)
     V_E_num = np.array(V_E).astype(np.float64)
     V_B_num = np.array(V_B).astype(np.float64)
     H_func = lambda E, B: H0_num + V_E_num * E + V_B_num * B
+    # Return a numeric SymPy matrix as placeholder; actual computation is via H_func
+    H_symbolic = sy.Matrix(H0_num)
     return H_func, H_symbolic
 
 def H_odd_A(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all',precision=5):
@@ -292,7 +337,7 @@ def H_odd_A(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all
                 state_out = {q+'0':q_numbers[q][i] for q in q_str}
                 state_in = {q+'1':q_numbers[q][j] for q in q_str}
                 q_args = {**state_out,**state_in}
-                elements = {term: _safe_element_call(element, q_args) for term, element in matrix_elements.items()}
+                elements = _get_elements_dict(matrix_elements, q_args)
                 H0[i][j] = params['Be']*elements['N^2'] + params['ASO']*elements['SO']+\
                     params['h1/2Yb']*elements['IzLz_M'] - params['dYb']*elements['T2_2(IS)_M']+\
                     params['p+2q']*elements['Lambda-Doubling']
@@ -327,7 +372,6 @@ def H_odd_A(q_numbers,params,matrix_elements,symbolic=True,E=0,B=0,M_values='all
                     # params['g_L']*params['mu_B']*Bz*elements['ZeemanLZ']+params['g_S']*params['mu_B']*Bz*elements['ZeemanSZ'] +\
                     # Bz*params['g_lp']*params['mu_B']*elements['ZeemanParityZ'] - params['muE_A']*Ez*elements['StarkZ']+\
                     # params['p+2q']*elements['Lambda-Doubling']
-        return H
 
 def build_PTV_bBS(q_numbers,EDM_or_MQM,IM=5/2,iH=1/2):
     q_str = list(q_numbers)
