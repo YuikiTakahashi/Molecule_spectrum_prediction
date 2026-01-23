@@ -261,7 +261,8 @@ params_173X010 = { # all units MHz except for muE
 #'cH': 0.000082*c_from_inversecm_to_MHz,
 'bFH': 4.07,
 'cH': 3.49,
-'e2Qq0': -0.11079907*c_from_inversecm_to_MHz,
+#'e2Qq0': -0.11079907*c_from_inversecm_to_MHz,  # True value
+'e2Qq0': -3149,  # Temoporary test
 'q_lD': 4.1676e-04*c_from_inversecm_to_MHz,
 'p_lD': 4.2584e-04*c_from_inversecm_to_MHz,
 'muE': 2.16*0.503412,  #Debye in MHz/(V/cm)
