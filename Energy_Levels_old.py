@@ -606,24 +606,24 @@ class MoleculeLevels(object):
             energy1 = float(energies_sub[jj])
             freqs.append(abs(energy0 - energy1))
 
-            N0 = int(N_array[ii])
-            N1 = int(N_array[jj])
-            M0 = int(M_array[ii])
-            M1 = int(M_array[jj])
-            F0 = int(F_array[ii])
-            F1 = int(F_array[jj])
+            N0 = (N_array[ii])
+            N1 = (N_array[jj])
+            M0 = (M_array[ii])
+            M1 = (M_array[jj])
+            F0 = (F_array[ii])
+            F1 = (F_array[jj])
             Parity0 = float(Parities[ii])
             Parity1 = float(Parities[jj])
 
             if '174' in self.iso_state:
-                J0 = int(J_array[ii])
-                J1 = int(J_array[jj])
+                J0 = (J_array[ii])
+                J1 = (J_array[jj])
                 state_info.append({"freq": abs(energy0-energy1), "state index 0": state_index_0,"energy 0": energy0,"N0": N0, "J0": J0, "F0": F0, "M0": M0, "Parity0": Parity0,  "state index 1": state_index_1,"energy 1": energy1,"N1": N1, "J1": J1, "F1": F1, "M1": M1, "Parity1": Parity1})
             else:
-                F10 = int(F1_array[ii])
-                G0 = int(G_array[ii])
-                F11 = int(F1_array[jj])
-                G1 = int(G_array[jj])
+                F10 = (F1_array[ii])
+                G0 = (G_array[ii])
+                F11 = (F1_array[jj])
+                G1 = (G_array[jj])
                 state_info.append({"freq": abs(energy0-energy1), "state index 0": state_index_0,"energy 0": energy0,"N0": N0, "G0": G0, "F10": F10, "F0": F0, "M0": M0, "Parity0": Parity0, "state index 1": state_index_1,"energy 1": energy1,"N1": N1, "G1": G1,  "F11": F11, "F1": F1, "M1": M1, "Parity1": Parity1})
 
         return freqs, state_info
