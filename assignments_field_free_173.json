@@ -1,0 +1,212 @@
+[
+  {
+    "freq": 17331.605394,
+    "ground state": {
+      "N": 1,
+      "G": 2,
+      "F": 1,
+      "Parity": 1
+    },
+    "excited state": {
+      "J": 1.5,
+      "F": 2,
+      "Parity": -1
+    }
+  },
+  {
+    "freq": 17331.610564,
+    "ground state": {
+      "N": 1,
+      "G": 2,
+      "F": 1,
+      "Parity": 1
+    },
+    "excited state": {
+      "J": 1.5,
+      "F": 1,
+      "Parity": -1
+    }
+  },
+  {
+    "freq": 17331.581305,
+    "ground state": {
+      "N": 1,
+      "G": 2,
+      "F": 2,
+      "Parity": 1
+    },
+    "excited state": {
+      "J": 1.5,
+      "F": 3,
+      "Parity": -1
+    }
+  },
+  {
+    "freq": 17331.590225,
+    "ground state": {
+      "N": 1,
+      "G": 2,
+      "F": 2,
+      "Parity": 1
+    },
+    "excited state": {
+      "J": 1.5,
+      "F": 2,
+      "Parity": -1
+    }
+  },
+  {
+    "freq": 17331.595319,
+    "ground state": {
+      "N": 1,
+      "G": 2,
+      "F": 2,
+      "Parity": 1
+    },
+    "excited state": {
+      "J": 1.5,
+      "F": 1,
+      "Parity": -1
+    }
+  },
+  {
+    "freq": 17331.59015,
+    "ground state": {
+      "N": 1,
+      "G": 2,
+      "F": 3,
+      "Parity": 1
+    },
+    "excited state": {
+      "J": 1.5,
+      "F": 3,
+      "Parity": -1
+    }
+  },
+  {
+    "freq": 17331.580177,
+    "ground state": {
+      "N": 1,
+      "G": 2,
+      "F": 3,
+      "Parity": 1
+    },
+    "excited state": {
+      "J": 1.5,
+      "F": 4,
+      "Parity": -1
+    }
+  },
+  {
+    "freq": 17331.59903,
+    "ground state": {
+      "N": 1,
+      "G": 2,
+      "F": 3,
+      "Parity": 1
+    },
+    "excited state": {
+      "J": 1.5,
+      "F": 2,
+      "Parity": -1
+    }
+  },
+  {
+    "freq": 17331.770717,
+    "ground state": {
+      "N": 1,
+      "G": 3,
+      "F": 4,
+      "Parity": 1
+    },
+    "excited state": {
+      "J": 1.5,
+      "F": 4,
+      "Parity": -1
+    }
+  },
+  {
+    "freq": 17331.780638,
+    "ground state": {
+      "N": 1,
+      "G": 3,
+      "F": 4,
+      "Parity": 1
+    },
+    "excited state": {
+      "J": 1.5,
+      "F": 3,
+      "Parity": -1
+    }
+  },
+  {
+    "freq": 17331.758184,
+    "ground state": {
+      "N": 1,
+      "G": 3,
+      "F": 3,
+      "Parity": 1
+    },
+    "excited state": {
+      "J": 1.5,
+      "F": 4,
+      "Parity": -1
+    }
+  },
+  {
+    "freq": 17331.768094,
+    "ground state": {
+      "N": 1,
+      "G": 3,
+      "F": 3,
+      "Parity": 1
+    },
+    "excited state": {
+      "J": 1.5,
+      "F": 3,
+      "Parity": -1
+    }
+  },
+  {
+    "freq": 17331.776898,
+    "ground state": {
+      "N": 1,
+      "G": 3,
+      "F": 3,
+      "Parity": 1
+    },
+    "excited state": {
+      "J": 1.5,
+      "F": 2,
+      "Parity": -1
+    }
+  },
+  {
+    "freq": 17331.792063,
+    "ground state": {
+      "N": 1,
+      "G": 3,
+      "F": 2,
+      "Parity": 1
+    },
+    "excited state": {
+      "J": 1.5,
+      "F": 2,
+      "Parity": -1
+    }
+  },
+  {
+    "freq": 17331.797267,
+    "ground state": {
+      "N": 1,
+      "G": 3,
+      "F": 2,
+      "Parity": 1
+    },
+    "excited state": {
+      "J": 1.5,
+      "F": 1,
+      "Parity": -1
+    }
+  }
+]
