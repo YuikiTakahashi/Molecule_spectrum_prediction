@@ -247,10 +247,24 @@ params_171X010 = {
 
 
 
-
-
-
 #This is the new YbOH 173X010 parameter
+params_173X010 = { # all units MHz except for muE
+'Be': 0.2446402 *c_from_inversecm_to_MHz,
+'Gamma_SR': -0.00337366  *c_from_inversecm_to_MHz,
+'Gamma_Prime': 0.0007639237 *c_from_inversecm_to_MHz,
+'bFYb': -0.06277542 *c_from_inversecm_to_MHz,
+'cYb': -0.002510204 *c_from_inversecm_to_MHz,
+'bFH': 4.07,
+'cH': 5.49,
+'e2Qq0': -0.108204 *c_from_inversecm_to_MHz,  # Temoporary test
+'q_lD': 0.0004055556*c_from_inversecm_to_MHz,
+'p_lD': 0,
+'muE': 2.16*0.503412,  #Debye in MHz/(V/cm)
+'g_S_eff': 2.07
+}
+
+'''
+#This is not correct because this includes p term which deos not agree with two-photon Stark spectrum at all. This was only temporalily used for the YbOH 173X010 parameters.
 params_173X010 = { # all units MHz except for muE
 'Be': 0.2446402 *c_from_inversecm_to_MHz,
 'Gamma_SR': -0.002799349 *c_from_inversecm_to_MHz,
@@ -265,6 +279,7 @@ params_173X010 = { # all units MHz except for muE
 'muE': 2.16*0.503412,  #Debye in MHz/(V/cm)
 'g_S_eff': 2.07
 }
+'''
 
 '''
 #This is the YbOH 173X010 parameter from the PRL paper with some updates I think
