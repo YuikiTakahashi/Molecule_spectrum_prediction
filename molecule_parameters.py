@@ -254,12 +254,12 @@ params_173X010 = { # all units MHz except for muE
 'Gamma_Prime': 0.0007639237 *c_from_inversecm_to_MHz,
 'bFYb': -0.06277542 *c_from_inversecm_to_MHz,
 'cYb': -0.002510204 *c_from_inversecm_to_MHz,
-'bFH': 4.07,
-'cH': 5.49,
-'e2Qq0': -0.108204 *c_from_inversecm_to_MHz,  # Temoporary test
-'q_lD': 0.0004055556*c_from_inversecm_to_MHz,
+'bFH': 4.07 -1.6,
+'cH': 5.49 - (0.3 * 1.6),
+'e2Qq0': -0.108204 *c_from_inversecm_to_MHz + 2,  # Temoporary test
+'q_lD': 0.0004055556*c_from_inversecm_to_MHz + 12.158251*0.15 ,
 'p_lD': 0,
-'muE': 2.16*0.503412,  #Debye in MHz/(V/cm)
+'muE': 0.97 * 2.16*0.503412,  #Debye in MHz/(V/cm)
 'g_S_eff': 2.07
 }
 
